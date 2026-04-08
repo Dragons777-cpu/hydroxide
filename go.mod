@@ -5,6 +5,7 @@ go 1.24.0
 require (
 	github.com/ProtonMail/go-crypto v1.3.0
 	github.com/emersion/go-bcrypt v0.0.0-20170822072041-6e724a1baa63
+	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/emersion/go-imap v1.2.1
 	github.com/emersion/go-mbox v1.0.4
 	github.com/emersion/go-message v0.18.2
@@ -19,6 +20,7 @@ require (
 
 require (
 	github.com/cloudflare/circl v1.6.1 // indirect
+	github.com/teambition/rrule-go v1.8.2 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 )

@@ -19,6 +19,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/emersion/hydroxide/auth"
+	"github.com/emersion/hydroxide/caldav"
 	"github.com/emersion/hydroxide/carddav"
 	"github.com/emersion/hydroxide/config"
 	"github.com/emersion/hydroxide/events"
@@ -163,6 +164,52 @@ func listenAndServeCardDAV(addr string, authManager *auth.Manager, eventsManager
 	return s.ListenAndServe()
 }
 
+func listenAndServeCalDAV(addr string, authManager *auth.Manager, eventsManager *events.Manager, tlsConfig *tls.Config) error {
+	// TODO: Implement full CalDAV server
+	// For now, return a simple handler
+	log.Println("CalDAV server: Implementation in progress")
+	
+	handlers := make(map[string]http.Handler)
+
+	s := &http.Server{
+		Addr: addr,
+		TLSConfig: tlsConfig,
+		Handler: http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+			username, password, ok := req.BasicAuth()
+			if !ok {
+				resp.WriteHeader(http.StatusUnauthorized)
+				io.WriteString(resp, "Credentials are required")
+				return
+			}
+
+			c, privateKeys, err := authManager.Auth(username, password)
+			if err != nil {
+				resp.WriteHeader(http.StatusUnauthorized)
+				io.WriteString(resp, err.Error())
+				return
+			}
+
+			h, ok := handlers[username]
+			if !ok {
+				ch := make(chan *protonmail.Event)
+				eventsManager.Register(c, username, ch, nil)
+				h = caldav.NewHandler(c, privateKeys, ch)
+				handlers[username] = h
+			}
+
+			h.ServeHTTP(resp, req)
+		}),
+	}
+
+	if s.TLSConfig != nil {
+		log.Println("CalDAV server listening with TLS on", s.Addr)
+		return s.ListenAndServeTLS("", "")
+	}
+
+	log.Println("CalDAV server listening on", s.Addr)
+	return s.ListenAndServe()
+}
+
 func isMbox(br *bufio.Reader) (bool, error) {
 	prefix := []byte("From ")
 	b, err := br.Peek(len(prefix))
@@ -175,6 +222,7 @@ func isMbox(br *bufio.Reader) (bool, error) {
 const usage = `usage: hydroxide [options...] <command>
 Commands:
 	auth <username>		Login to ProtonMail via hydroxide
+	caldav			Run hydroxide as a CalDAV server
 	carddav			Run hydroxide as a CardDAV server
 	export-secret-keys <username> Export secret keys
 	imap			Run hydroxide as an IMAP server
@@ -236,6 +284,8 @@ func main() {
 
 	carddavHost := flag.String("carddav-host", "127.0.0.1", "Allowed CardDAV email hostname on which hydroxide listens, defaults to 127.0.0.1")
 	carddavPort := flag.String("carddav-port", "8080", "CardDAV port on which hydroxide listens, defaults to 8080")
+	caldavHost := flag.String("caldav-host", "127.0.0.1", "Allowed CalDAV email hostname on which hydroxide listens, defaults to 127.0.0.1")
+	caldavPort := flag.String("caldav-port", "8081", "CalDAV port on which hydroxide listens, defaults to 8081")
 	disableCardDAV := flag.Bool("disable-carddav", false, "Disable CardDAV for hydroxide serve")
 
 	tlsCert := flag.String("tls-cert", "", "Path to the certificate to use for incoming connections")
@@ -497,6 +547,11 @@ func main() {
 		authManager := auth.NewManager(newClient)
 		eventsManager := events.NewManager()
 		log.Fatal(listenAndServeIMAP(addr, debug, authManager, eventsManager, tlsConfig))
+	case "caldav":
+		addr := *caldavHost + ":" + *caldavPort
+		authManager := auth.NewManager(newClient)
+		eventsManager := events.NewManager()
+		log.Fatal(listenAndServeCalDAV(addr, authManager, eventsManager, tlsConfig))
 	case "carddav":
 		addr := *carddavHost + ":" + *carddavPort
 		authManager := auth.NewManager(newClient)
