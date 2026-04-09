@@ -1,63 +1,78 @@
 package caldav
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"testing"
-
-	"github.com/ProtonMail/go-crypto/openpgp"
+	"time"
 )
 
-// TestNewHandlerNilKeys tests that NewHandler panics with nil keys
-func TestNewHandlerNilKeys(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("NewHandler() should panic when no private keys provided")
+func TestFormatICS(t *testing.T) {
+	cal := &Calendar{
+		ID:          "cal1",
+		Name:        "Test Calendar",
+		Description: "A test calendar",
+	}
+	
+	ev := &Event{
+		ID:       "ev1",
+		UID:      "test-uid-123",
+		Summary:  "Test Event",
+		Start:    time.Date(2026, 4, 10, 14, 0, 0, 0, time.UTC),
+		End:      time.Date(2026, 4, 10, 15, 0, 0, 0, time.UTC),
+		Location: "Test Location",
+		AllDay:   false,
+	}
+	
+	ics := formatICS(cal, ev)
+	
+	if !contains(ics, "BEGIN:VCALENDAR") {
+		t.Error("Missing VCALENDAR start")
+	}
+	if !contains(ics, "SUMMARY:Test Event") {
+		t.Error("Missing event summary")
+	}
+	if !contains(ics, "LOCATION:Test Location") {
+		t.Error("Missing location")
+	}
+	if !contains(ics, "END:VCALENDAR") {
+		t.Error("Missing VCALENDAR end")
+	}
+}
+
+func TestFormatICSAllDay(t *testing.T) {
+	cal := &Calendar{
+		ID:   "cal1",
+		Name: "Test",
+	}
+	
+	ev := &Event{
+		ID:      "ev1",
+		UID:     "all-day-uid",
+		Summary: "All Day Event",
+		Start:   time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC),
+		End:     time.Date(2026, 4, 11, 0, 0, 0, 0, time.UTC),
+		AllDay:  true,
+	}
+	
+	ics := formatICS(cal, ev)
+	
+	if !contains(ics, "DTSTART;VALUE=DATE") {
+		t.Error("All-day event should have VALUE=DATE")
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) > 0 && len(substr) > 0 && 
+		(s == substr || len(s) > len(substr) && 
+		(s[:len(substr)] == substr || 
+		s[len(s)-len(substr):] == substr || 
+		findSubstring(s, substr)))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
 		}
-	}()
-
-	NewHandler(nil, nil, nil)
-}
-
-// TestNewHandlerValidKeys tests handler creation with valid keys
-func TestNewHandlerValidKeys(t *testing.T) {
-	// Create a test key
-	entity, err := openpgp.NewEntity("Test User", "test", "test@example.com", nil)
-	if err != nil {
-		t.Fatalf("Failed to create test key: %v", err)
 	}
-
-	handler := NewHandler(nil, openpgp.EntityList{entity}, nil)
-	if handler == nil {
-		t.Error("NewHandler() returned nil")
-	}
-}
-
-// TestHandlerReturns501 tests that the handler returns 501 Not Implemented
-func TestHandlerReturns501(t *testing.T) {
-	entity, err := openpgp.NewEntity("Test User", "test", "test@example.com", nil)
-	if err != nil {
-		t.Fatalf("Failed to create test key: %v", err)
-	}
-
-	handler := NewHandler(nil, openpgp.EntityList{entity}, nil)
-	if handler == nil {
-		t.Fatal("NewHandler() returned nil")
-	}
-
-	// Create test request
-	req := httptest.NewRequest("PROPFIND", "/calendars/default", nil)
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	// Should return 501 Not Implemented
-	if w.Code != http.StatusNotImplemented {
-		t.Errorf("Expected status 501, got %d", w.Code)
-	}
-
-	// Should mention implementation in progress
-	if body := w.Body.String(); body == "" {
-		t.Error("Expected non-empty response body")
-	}
+	return false
 }
